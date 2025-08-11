@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+      - name: Lint
+        run: |
+          ruff check .
+          black --check .
+      - name: Typecheck
+        run: |
+          mypy apps/api apps/sidecar opsctl policy
+      - name: Tests
+        run: |
+          pytest --cov=apps --cov-report xml:coverage.xml
+      - name: Diff Coverage Gate
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: |
+          BASE=${GITHUB_BASE_REF:-main}
+          git fetch origin $BASE --depth=1 || true
+          diff-cover coverage.xml --compare-branch origin/$BASE --fail-under 80 || (echo "Diff coverage gate failed" && exit 1)
+      - name: Policy Lints
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1 || true
+          python policy/lints/commit_policy.py
+      - name: Docker Build
+        run: |
+          docker build -f infrastructure/Dockerfile.api -t ai-tutor-autopilot:ci .
+      - name: Upload coverage
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+

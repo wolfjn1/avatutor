@@ -1,0 +1,52 @@
+version: 1
+events:
+  session_started:
+    description: Session created by a user
+    required:
+      - session_id
+      - user_id
+      - subject
+      - entry_point
+    properties:
+      session_id: {type: string}
+      user_id: {type: string}
+      subject: {type: string}
+      entry_point: {type: string}
+  session_ended:
+    description: Session ended
+    required:
+      - session_id
+      - duration_ms
+      - reason
+    properties:
+      session_id: {type: string}
+      duration_ms: {type: integer}
+      reason: {type: string}
+  turn:
+    description: A single conversational turn metrics
+    required:
+      - session_id
+      - user_id
+      - stt_latency_ms
+      - llm_first_token_ms
+      - tts_synth_time_ms
+      - total_turn_latency_ms
+    properties:
+      session_id: {type: string}
+      user_id: {type: string}
+      stt_latency_ms: {type: integer}
+      llm_first_token_ms: {type: integer}
+      tts_synth_time_ms: {type: integer}
+      total_turn_latency_ms: {type: integer}
+  interruption:
+    description: User or system interruption
+    required:
+      - session_id
+      - user_id
+      - type
+    properties:
+      session_id: {type: string}
+      user_id: {type: string}
+      type: {type: string}
+
+

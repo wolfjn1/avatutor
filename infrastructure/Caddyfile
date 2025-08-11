@@ -1,0 +1,11 @@
+:8080 {
+  route /health* {
+    reverse_proxy api:8000
+  }
+  route /metrics* {
+    reverse_proxy api:8000
+  }
+  reverse_proxy api:8000
+}
+
+

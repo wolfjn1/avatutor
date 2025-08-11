@@ -1,0 +1,17 @@
+project: ai-tutor
+budgets:
+  api_ms_per_turn: 1000
+  stt_ms: 200
+  llm_first_token_ms: 300
+  tts_ms: 300
+queues:
+  - api
+  - frontend
+  - infra
+  - etl
+flags:
+  - VOICE_AVATAR_MVP
+  - PUSH_TO_TALK
+  - VAD_BARGE_IN
+
+

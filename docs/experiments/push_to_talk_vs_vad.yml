@@ -1,0 +1,14 @@
+name: push_to_talk_vs_vad
+hypothesis: Push-to-talk reduces false starts relative to VAD with similar latency.
+metrics:
+  - turn_p95_latency_ms
+  - ws_disconnect_rate
+unit: session
+sample_size: 100
+guardrails:
+  error_rate: 0.05
+  crash_rate: 0.01
+  p95_turn_latency_ms: 1500
+SRM_check: true
+
+

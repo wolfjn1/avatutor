@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash build-essential curl git libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md /app/
+RUN pip install -e .[dev]
+
+COPY apps /app/apps
+COPY analytics /app/analytics
+COPY docs /app/docs
+COPY infrastructure /app/infrastructure
+COPY agents /app/agents
+COPY scripts /app/scripts
+COPY opsctl /app/opsctl
+COPY policy /app/policy
+COPY tests /app/tests
+
+RUN useradd -m -u 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
+HEALTHCHECK CMD curl -fsS http://localhost:8000/health || exit 1
+
+

@@ -1,0 +1,13 @@
+{
+  "name": "ai-tutor-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "vite": "5.3.1"
+  }
+}
+
+

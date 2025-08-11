@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Tutor MVP</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+      #partials { white-space: pre-wrap; border: 1px solid #ddd; padding: 8px; min-height: 60px; }
+      #avatar { font-size: 48px; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 12px; background: #eee; margin-right: 6px; }
+    </style>
+  </head>
+  <body>
+    <h2>Live AI Tutor MVP</h2>
+    <div>
+      <span class="pill" id="provider-stt">stt: mock</span>
+      <span class="pill" id="provider-llm">llm: echo</span>
+      <span class="pill" id="provider-tts">tts: mock</span>
+      <span class="pill" id="provider-avatar">avatar: mock</span>
+    </div>
+    <p>
+      Spacebar: push-to-talk. Toggle VAD: <button id="btn-vad">Off</button>
+    </p>
+    <div>
+      <button id="btn-connect">Connect</button>
+      <button id="btn-disconnect">Disconnect</button>
+    </div>
+    <h3>Partial transcripts</h3>
+    <div id="partials"></div>
+    <h3>LLM</h3>
+    <div>First token: <span id="first-token">(waiting)</span></div>
+    <h3>TTS</h3>
+    <audio id="audio" controls></audio>
+    <h3>Avatar</h3>
+    <div id="avatar">🙂</div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+  </html>
+
+

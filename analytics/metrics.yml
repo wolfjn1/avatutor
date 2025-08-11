@@ -1,0 +1,31 @@
+version: 1
+metrics:
+  api_p95_latency_ms:
+    description: 95th percentile API latency
+    owner: platform
+  ws_disconnect_rate:
+    description: WebSocket disconnects per session
+    owner: platform
+  turn_p95_latency_ms:
+    description: 95th percentile turn latency
+    owner: platform
+  price_per_turn_usd:
+    description: Estimated price per conversational turn in USD
+    owner: platform
+  tokens_in:
+    description: Estimated prompt tokens per turn
+    owner: platform
+  tokens_out:
+    description: Estimated completion tokens per turn
+    owner: platform
+  stt_latency_ms:
+    description: STT time per turn in ms
+    owner: platform
+  tts_latency_ms:
+    description: TTS synth time per turn in ms
+    owner: platform
+  llm_first_token_ms:
+    description: Time to first token in ms
+    owner: platform
+
+
