@@ -112,3 +112,5 @@ window.updateTelemetry = (p) => {
 };
 
 
+
+fetch('/achievements.json').then(r=>r.json()).then(d=>{window.achievements=d.badges||[];}).catch(()=>{});
