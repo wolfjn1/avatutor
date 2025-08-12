@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tempfile
+import shutil
 from pathlib import Path
 from typing import Dict, Optional, Tuple, List
 
@@ -96,6 +98,38 @@ def _merge(slug: str, pr_number: int, method: str = "squash") -> bool:
             return r.status_code in (200, 201)
     except Exception:
         return False
+
+
+def _rebase_pr_branch(slug: str, branch: str) -> bool:
+    """Rebase PR branch onto origin/main using a temp clone and push via token.
+
+    Returns True if push succeeded (branch updated), False otherwise.
+    """
+    token = os.getenv("GH_TOKEN", "")
+    if not token or not slug or not branch:
+        return False
+    tmp = Path(tempfile.mkdtemp(prefix=f"rebase-{branch.replace('/', '-')}-"))
+    try:
+        clone_url = f"https://x-access-token:{token}@github.com/{slug}.git"
+        # Clone branch with some history to allow rebase
+        subprocess.run(["git", "clone", "--depth", "50", "--branch", branch, clone_url, str(tmp)], check=True)
+        # Fetch main and rebase
+        subprocess.run(["git", "fetch", "origin", "main"], cwd=str(tmp), check=True)
+        res = subprocess.run(["git", "rebase", "origin/main"], cwd=str(tmp))
+        if res.returncode != 0:
+            # Abort rebase and bail; conflict requires human
+            subprocess.run(["git", "rebase", "--abort"], cwd=str(tmp), check=False)
+            return False
+        # Force-push with lease to the same branch
+        push_res = subprocess.run(["git", "push", "origin", f"HEAD:refs/heads/{branch}", "--force-with-lease"], cwd=str(tmp))
+        return push_res.returncode == 0
+    except Exception:
+        return False
+    finally:
+        try:
+            shutil.rmtree(tmp, ignore_errors=True)
+        except Exception:
+            pass
 
 
 def _classify_change(files: list[str]) -> Tuple[bool, str]:
@@ -200,6 +234,20 @@ def auto_merge_if_safe(*, slug: str, pr_number: int, branch: str) -> Dict[str, s
         labels = _fetch_labels()
         safe = ("cto-tests-pass" in labels) and ("design-reviewed" in labels) and ("product-reviewed" in labels) and ("engineering-reviewed" in labels)
         if safe:
+            # Check mergeable state; if dirty try rebase then merge
+            mergeable_state = "unknown"
+            try:
+                with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
+                    pr = client.get(
+                        f"https://api.github.com/repos/{slug}/pulls/{pr_number}",
+                        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                    )
+                    if pr.status_code == 200:
+                        mergeable_state = pr.json().get("mergeable_state", "unknown")
+            except Exception:
+                pass
+            if mergeable_state == "dirty":
+                _rebase_pr_branch(slug, branch)
             merged = _merge(slug, pr_number)
             if merged:
                 try:
