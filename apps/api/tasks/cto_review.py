@@ -4,6 +4,8 @@ import os
 import re
 import subprocess
 from pathlib import Path
+import tempfile
+import shutil
 from typing import Dict, Optional
 
 import httpx
@@ -44,23 +46,33 @@ def _add_labels(slug: str, pr_number: int, labels: list[str]) -> None:
 @celery_app.task(name="apps.api.tasks.cto_review.cto_review")
 def cto_review(*, slug: str, pr_number: int, branch: str, url: str) -> Dict[str, str]:
     """CTO review: checkout branch, run tests, label PR based on results, log event."""
-    repo_root = Path(__file__).resolve().parents[3]
-    _git_identity(repo_root)
-    # Capture current branch
-    try:
-        current = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(repo_root)).decode().strip()
-    except Exception:
-        current = "main"
-
+    # Clone branch into a temp workdir using token-based HTTPS to avoid SSH issues / dirty trees
+    token = os.getenv("GH_TOKEN", "")
+    slug_env = _get_origin_slug(Path(__file__).resolve().parents[3]) or ""
+    slug_use = slug or slug_env
+    tmpdir = Path(tempfile.mkdtemp(prefix=f"pr-{pr_number}-"))
     ok = False
     try:
-        subprocess.run(["git", "fetch", "origin", branch], cwd=str(repo_root), check=False)
-        subprocess.run(["git", "checkout", branch], cwd=str(repo_root), check=False)
+        if token and slug_use:
+            clone_url = f"https://x-access-token:{token}@github.com/{slug_use}.git"
+            subprocess.run(["git", "clone", "--depth", "1", "--branch", branch, clone_url, str(tmpdir)], check=True)
+        else:
+            # Fallback: use existing repo, best-effort checkout (may fail on dirty tree)
+            repo_root = Path(__file__).resolve().parents[3]
+            _git_identity(repo_root)
+            subprocess.run(["git", "fetch", "origin", branch], cwd=str(repo_root), check=False)
+            subprocess.run(["git", "checkout", branch], cwd=str(repo_root), check=False)
+            tmpdir = repo_root
         # Run tests with safe mocks
-        res = subprocess.run(["bash", "-lc", "scripts/run_tests_safe.sh"], cwd=str(repo_root), capture_output=True, text=True)
+        res = subprocess.run(["bash", "-lc", "scripts/run_tests_safe.sh"], cwd=str(tmpdir), capture_output=True, text=True)
         ok = res.returncode == 0
     finally:
-        subprocess.run(["git", "checkout", current], cwd=str(repo_root), check=False)
+        # Cleanup temp clone; if we used repo_root fallback, ignore
+        try:
+            if tmpdir.exists() and "pr-" in tmpdir.name:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
 
     # Label PR
     try:

@@ -23,6 +23,7 @@ celery_app = Celery(
         "apps.api.tasks.chief_of_staff",
         "apps.api.tasks.cto_review",
         "apps.api.tasks.reviews",
+        "apps.api.tasks.orchestrator",
     ],
 )
 
@@ -38,46 +39,12 @@ celery_app.conf.task_queues = {
 # and our worker does not bind to it. Setting this avoids orphaned tasks.
 celery_app.conf.task_default_queue = "api"
 
+# Keepalive orchestrator: backstops idle periods (runs every 2 minutes)
 celery_app.conf.beat_schedule = {
     "daily-morning-brief": {
         "task": "apps.api.tasks.reports.generate_morning_brief",
         "schedule": 60.0 * 60.0 * 24.0,  # daily
         "options": {"queue": "infra"},
-    },
-    "cost-ux-tune-120m": {
-        "task": "apps.api.tasks.autonomy.cost_ux_tune",
-        "schedule": 60.0 * 120.0,  # every 120 minutes
-        "options": {"queue": "infra"},
-    },
-    "frontend-polish-30m": {
-        "task": "apps.api.tasks.agents_frontend.improve_web_ui",
-        "schedule": 60.0 * 30.0,  # every 30 minutes
-        "options": {"queue": "frontend"},
-    },
-    "backend-prompt-30m": {
-        "task": "apps.api.tasks.agents_backend.improve_prompt_quality",
-        "schedule": 60.0 * 30.0,
-        "options": {"queue": "api"},
-    },
-    "backend-latency-30m": {
-        "task": "apps.api.tasks.agents_backend.tune_latency_budgets",
-        "schedule": 60.0 * 30.0,
-        "options": {"queue": "infra"},
-    },
-    "design-30m": {
-        "task": "apps.api.tasks.agents_design.improve_design_system",
-        "schedule": 60.0 * 30.0,
-        "options": {"queue": "frontend"},
-    },
-    "engagement-30m": {
-        "task": "apps.api.tasks.agents_engagement.improve_engagement",
-        "schedule": 60.0 * 30.0,
-        "options": {"queue": "frontend"},
-    },
-    "tutor-avatar-30m": {
-        "task": "apps.api.tasks.agents_tutor.improve_tutor_avatar",
-        "schedule": 60.0 * 30.0,
-        "options": {"queue": "api"},
     },
     "cos-progress-30m": {
         "task": "apps.api.tasks.chief_of_staff.progress_update",

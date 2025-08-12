@@ -10,6 +10,7 @@ import httpx
 
 from ..celery_app import celery_app
 from ..db import insert_event, session_scope
+from .orchestrator import on_pr_merged
 
 
 def _git_identity(repo_root: Path) -> None:
@@ -105,6 +106,10 @@ def head_design(*, slug: str, pr_number: int, branch: str) -> Dict[str, str]:
     files = _get_changed_files(repo_root, branch)
     trivial, label = _classify_change(files)
     _label(slug, pr_number, [f"design-reviewed", label])
+    try:
+        auto_merge_if_safe.delay(slug=slug, pr_number=pr_number, branch=branch)
+    except Exception:
+        pass
     if trivial and label == "design":
         _approve(slug, pr_number, "Design OK")
     return {"files": str(len(files)), "trivial": str(trivial).lower()}
@@ -118,6 +123,10 @@ def head_product(*, slug: str, pr_number: int, branch: str) -> Dict[str, str]:
     files = _get_changed_files(repo_root, branch)
     trivial, label = _classify_change(files)
     _label(slug, pr_number, [f"product-reviewed", label])
+    try:
+        auto_merge_if_safe.delay(slug=slug, pr_number=pr_number, branch=branch)
+    except Exception:
+        pass
     if trivial and label in ("product", "tutor", "misc"):
         _approve(slug, pr_number, "Product OK")
     return {"files": str(len(files)), "trivial": str(trivial).lower()}
@@ -131,6 +140,10 @@ def head_engineering(*, slug: str, pr_number: int, branch: str) -> Dict[str, str
     files = _get_changed_files(repo_root, branch)
     trivial, label = _classify_change(files)
     _label(slug, pr_number, [f"engineering-reviewed", label])
+    try:
+        auto_merge_if_safe.delay(slug=slug, pr_number=pr_number, branch=branch)
+    except Exception:
+        pass
     # Do not auto-approve .py changes; rely on CTO tests pass label
     return {"files": str(len(files)), "trivial": str(trivial).lower()}
 
@@ -142,22 +155,41 @@ def auto_merge_if_safe(*, slug: str, pr_number: int, branch: str) -> Dict[str, s
     token = os.getenv("GH_TOKEN")
     if not token:
         return {"merged": "false", "reason": "no_token"}
-    labels: list[str] = []
+    def _fetch_labels() -> list[str]:
+        try:
+            with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
+                r = client.get(
+                    f"https://api.github.com/repos/{slug}/issues/{pr_number}",
+                    headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                )
+                if r.status_code == 200:
+                    return [l.get("name", "") for l in r.json().get("labels", [])]
+        except Exception:
+            pass
+        return []
+
+    # Poll for labels for a short window to avoid races with head_* tasks
+    import time
+    merged = False
+    for _ in range(6):
+        labels = _fetch_labels()
+        safe = ("cto-tests-pass" in labels) and ("design-reviewed" in labels) and ("product-reviewed" in labels) and ("engineering-reviewed" in labels)
+        if safe:
+            merged = _merge(slug, pr_number)
+            if merged:
+                try:
+                    on_pr_merged.delay(slug=slug, pr_number=pr_number, branch=branch)
+                except Exception:
+                    pass
+                return {"merged": "true", "reason": "safe"}
+        time.sleep(2)
+
+    # If still not safe, schedule a follow-up check in 30s
     try:
-        with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
-            r = client.get(
-                f"https://api.github.com/repos/{slug}/issues/{pr_number}",
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
-            )
-            if r.status_code == 200:
-                labels = [l.get("name","") for l in r.json().get("labels", [])]
+        auto_merge_if_safe.apply_async(kwargs={"slug": slug, "pr_number": pr_number, "branch": branch}, countdown=30)
     except Exception:
         pass
-    safe = ("cto-tests-pass" in labels) and ("design-reviewed" in labels) and ("product-reviewed" in labels) and ("engineering-reviewed" in labels)
-    if safe:
-        merged = _merge(slug, pr_number)
-        return {"merged": str(merged).lower(), "reason": "safe"}
-    return {"merged": "false", "reason": "labels_incomplete"}
+    return {"merged": "false", "reason": "labels_incomplete_pending"}
 
 
 

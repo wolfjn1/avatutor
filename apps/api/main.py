@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, WebSocket
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 
 from .celery_app import celery_app  # noqa: F401  # ensure celery is importable
 from .db import Event, FeatureFlag, init_db, session_scope, upsert_flag
@@ -15,6 +15,7 @@ from .experiments import load_experiment
 from .telemetry import track_event
 from .ws_audio import handle_audio_ws
 from .tasks.cto_review import cto_review
+from .tasks.orchestrator import on_pr_merged
 from .tasks.reviews import head_design, head_product, head_engineering, auto_merge_if_safe
 
 
@@ -176,11 +177,13 @@ async def ws_audio(ws: WebSocket, session_id: str = "s-local", user_id: Optional
 
 
 @app.get("/ops/cos_updates")
-def cos_updates(limit: int = 10) -> Dict[str, Any]:
-    """Return the latest Chief of Staff updates from the event log.
+def cos_updates(limit: int = 10, format: str = "html"):
+    """Chief of Staff updates and live worker/PR status.
 
-    This endpoint does not require Slack; it reads from the `events` table where name == "cos.update".
+    - HTML view (default): dashboard showing workers and active PR review tasks.
+    - JSON view: set ?format=json for the raw CoS updates payload.
     """
+    # Fetch latest CoS updates from the DB
     with session_scope() as s:
         rows = (
             s.query(Event)
@@ -189,7 +192,7 @@ def cos_updates(limit: int = 10) -> Dict[str, Any]:
             .limit(max(1, min(limit, 100)))
             .all()
         )
-        out = [
+        updates = [
             {
                 "id": r.id,
                 "ts": r.ts,
@@ -201,7 +204,93 @@ def cos_updates(limit: int = 10) -> Dict[str, Any]:
             }
             for r in rows
         ]
-    return {"updates": out}
+
+    if format.lower() == "json":
+        return {"updates": updates}
+
+    # Build live worker/PR view using Celery inspect
+    try:
+        insp = celery_app.control.inspect(timeout=1.0)
+        active = insp.active() or {}
+        stats = insp.stats() or {}
+    except Exception:
+        active = {}
+        stats = {}
+
+    # Render minimal HTML dashboard
+    def _escape(s: Any) -> str:
+        try:
+            return str(s).replace("<", "&lt;").replace(">", "&gt;")
+        except Exception:
+            return ""
+
+    rows_html: list[str] = []
+    if not active:
+        rows_html.append("<tr><td colspan=4>Idle (no active tasks)</td></tr>")
+    else:
+        import ast
+        for worker, tasks in active.items():
+            meta = stats.get(worker, {}) if isinstance(stats, dict) else {}
+            concurrency = meta.get("pool", {}).get("max-concurrency") or meta.get("concurrency") or "?"
+            if not tasks:
+                rows_html.append(f"<tr><td>{_escape(worker)}</td><td>idle</td><td>-</td><td>-</td></tr>")
+                continue
+            for t in tasks:
+                name = t.get("name", "?")
+                kwargs = t.get("kwargs", {})
+                if isinstance(kwargs, str):
+                    try:
+                        kwargs = ast.literal_eval(kwargs)
+                    except Exception:
+                        kwargs = {"raw": kwargs}
+                pr = kwargs.get("pr_number") or kwargs.get("pr") or "-"
+                branch = kwargs.get("branch", "-")
+                slug = kwargs.get("slug", "-")
+                rows_html.append(
+                    f"<tr>"
+                    f"<td>{_escape(worker)}<br/><small>conc: {_escape(concurrency)}</small></td>"
+                    f"<td>{_escape(name)}</td>"
+                    f"<td>PR {_escape(pr)}</td>"
+                    f"<td>{_escape(branch)}<br/><small>{_escape(slug)}</small></td>"
+                    f"</tr>"
+                )
+
+    html = f"""
+    <html>
+      <head>
+        <meta http-equiv="refresh" content="5" />
+        <title>Ops Dashboard</title>
+        <style>
+          body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }}
+          h1 {{ margin: 0 0 10px 0; }}
+          table {{ border-collapse: collapse; width: 100%; }}
+          th, td {{ border: 1px solid #ddd; padding: 8px; }}
+          th {{ background: #f4f6f8; text-align: left; }}
+          .section {{ margin-top: 24px; }}
+          pre {{ white-space: pre-wrap; }}
+        </style>
+      </head>
+      <body>
+        <h1>Ops Dashboard</h1>
+        <div class="section">
+          <h2>Workers (live)</h2>
+          <table>
+            <thead>
+              <tr><th>Worker</th><th>Task</th><th>PR</th><th>Branch</th></tr>
+            </thead>
+            <tbody>
+              {''.join(rows_html)}
+            </tbody>
+          </table>
+        </div>
+        <div class="section">
+          <h2>Chief of Staff (last {len(updates)} updates)</h2>
+          <pre>{_escape(updates)}</pre>
+        </div>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html, status_code=200)
 
 
 @app.get("/experiments/{name}")
@@ -239,6 +328,8 @@ def notify_pr(payload: Dict[str, Any]) -> Dict[str, Any]:
         head_product.delay(slug=slug, pr_number=pr_number, branch=branch)
         head_engineering.delay(slug=slug, pr_number=pr_number, branch=branch)
         auto_merge_if_safe.delay(slug=slug, pr_number=pr_number, branch=branch)
+        # Also enqueue next batch on PR opened to keep momentum even before merge
+        on_pr_merged.delay(slug=slug, pr_number=pr_number, branch=branch)
     except Exception:
         pass
     return {"ok": True}
