@@ -15,6 +15,7 @@ celery_app = Celery(
         "apps.api.tasks.dlq",
         "apps.api.tasks.guardrails",
         "apps.api.tasks.autonomy",
+        "apps.api.tasks.agents_frontend",
     ],
 )
 
@@ -35,6 +36,11 @@ celery_app.conf.beat_schedule = {
         "task": "apps.api.tasks.autonomy.cost_ux_tune",
         "schedule": 60.0 * 60.0 * 24.0 * 7.0,  # weekly
         "options": {"queue": "infra"},
+    },
+    "weekly-frontend-polish": {
+        "task": "apps.api.tasks.agents_frontend.improve_web_ui",
+        "schedule": 60.0 * 60.0 * 24.0 * 7.0,  # weekly
+        "options": {"queue": "frontend"},
     },
 }
 
