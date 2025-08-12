@@ -24,6 +24,7 @@ celery_app = Celery(
         "apps.api.tasks.cto_review",
         "apps.api.tasks.reviews",
         "apps.api.tasks.orchestrator",
+        "apps.api.tasks.conflict_resolver",
     ],
 )
 

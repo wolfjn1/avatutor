@@ -13,6 +13,7 @@ import httpx
 from ..celery_app import celery_app
 from ..db import insert_event, session_scope
 from .orchestrator import on_pr_merged
+from .conflict_resolver import open_conflict_fix_pr
 
 
 def _git_identity(repo_root: Path) -> None:
@@ -286,11 +287,11 @@ def auto_merge_if_safe(*, slug: str, pr_number: int, branch: str) -> Dict[str, s
                     ok = _rebase_pr_branch(slug, branch)
                     if not ok:
                         _label(slug, pr_number, ["needs-rebase-conflict"])
-                        _comment(
-                            slug,
-                            pr_number,
-                            "Automated rebase could not resolve conflicts. Please resolve conflicts or push an updated branch."
-                        )
+                        _comment(slug, pr_number, "Automated rebase could not resolve conflicts; opening helper PR.")
+                        try:
+                            open_conflict_fix_pr.delay(slug=slug, pr_number=pr_number, branch=branch)
+                        except Exception:
+                            pass
                         return {"merged": "false", "reason": "conflict"}
             merged = _merge(slug, pr_number)
             if merged:
