@@ -15,6 +15,8 @@ celery_app = Celery(
         "apps.api.tasks.dlq",
         "apps.api.tasks.guardrails",
         "apps.api.tasks.autonomy",
+        "apps.api.tasks.agents_frontend",
+        "apps.api.tasks.agents_backend",
     ],
 )
 
@@ -31,9 +33,24 @@ celery_app.conf.beat_schedule = {
         "schedule": 60.0 * 60.0 * 24.0,  # daily
         "options": {"queue": "infra"},
     },
-    "weekly-cost-ux-tune": {
+    "cost-ux-tune-120m": {
         "task": "apps.api.tasks.autonomy.cost_ux_tune",
-        "schedule": 60.0 * 60.0 * 24.0 * 7.0,  # weekly
+        "schedule": 60.0 * 120.0,  # every 120 minutes
+        "options": {"queue": "infra"},
+    },
+    "frontend-polish-120m": {
+        "task": "apps.api.tasks.agents_frontend.improve_web_ui",
+        "schedule": 60.0 * 120.0,  # every 120 minutes
+        "options": {"queue": "frontend"},
+    },
+    "backend-prompt-120m": {
+        "task": "apps.api.tasks.agents_backend.improve_prompt_quality",
+        "schedule": 60.0 * 120.0,
+        "options": {"queue": "api"},
+    },
+    "backend-latency-120m": {
+        "task": "apps.api.tasks.agents_backend.tune_latency_budgets",
+        "schedule": 60.0 * 120.0,
         "options": {"queue": "infra"},
     },
 }
