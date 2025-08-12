@@ -4,7 +4,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 import httpx
 
@@ -19,6 +19,7 @@ def _git_identity(repo_root: Path) -> None:
 
 
 def _get_changed_files(repo_root: Path, branch: str) -> list[str]:
+    # Legacy local git diff. Kept as a fallback when GH API unavailable.
     try:
         base = subprocess.check_output(["git", "merge-base", branch, "origin/main"], cwd=str(repo_root)).decode().strip()
     except Exception:
@@ -28,6 +29,27 @@ def _get_changed_files(repo_root: Path, branch: str) -> list[str]:
         return [ln.strip() for ln in out.splitlines() if ln.strip()]
     except Exception:
         return []
+
+
+def _get_pr_files_via_api(slug: str, pr_number: int) -> List[str]:
+    token = os.getenv("GH_TOKEN", "")
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
+            r = client.get(f"https://api.github.com/repos/{slug}/pulls/{pr_number}/files", headers=headers)
+            if r.status_code != 200:
+                return []
+            data = r.json()
+    except Exception:
+        return []
+    files: List[str] = []
+    for it in data:
+        p = it.get("filename")
+        if isinstance(p, str) and p:
+            files.append(p)
+    return files
 
 
 def _label(slug: str, pr_number: int, labels: list[str]) -> None:
@@ -103,7 +125,8 @@ def head_design(*, slug: str, pr_number: int, branch: str) -> Dict[str, str]:
     repo_root = Path(__file__).resolve().parents[3]
     _git_identity(repo_root)
     subprocess.run(["git", "fetch", "origin", branch], cwd=str(repo_root), check=False)
-    files = _get_changed_files(repo_root, branch)
+    api_files = _get_pr_files_via_api(slug, pr_number)
+    files = api_files or _get_changed_files(repo_root, branch)
     trivial, label = _classify_change(files)
     _label(slug, pr_number, [f"design-reviewed", label])
     try:
@@ -120,7 +143,8 @@ def head_product(*, slug: str, pr_number: int, branch: str) -> Dict[str, str]:
     repo_root = Path(__file__).resolve().parents[3]
     _git_identity(repo_root)
     subprocess.run(["git", "fetch", "origin", branch], cwd=str(repo_root), check=False)
-    files = _get_changed_files(repo_root, branch)
+    api_files = _get_pr_files_via_api(slug, pr_number)
+    files = api_files or _get_changed_files(repo_root, branch)
     trivial, label = _classify_change(files)
     _label(slug, pr_number, [f"product-reviewed", label])
     try:
@@ -137,7 +161,8 @@ def head_engineering(*, slug: str, pr_number: int, branch: str) -> Dict[str, str
     repo_root = Path(__file__).resolve().parents[3]
     _git_identity(repo_root)
     subprocess.run(["git", "fetch", "origin", branch], cwd=str(repo_root), check=False)
-    files = _get_changed_files(repo_root, branch)
+    api_files = _get_pr_files_via_api(slug, pr_number)
+    files = api_files or _get_changed_files(repo_root, branch)
     trivial, label = _classify_change(files)
     _label(slug, pr_number, [f"engineering-reviewed", label])
     try:
