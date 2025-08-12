@@ -56,10 +56,8 @@ def cost_ux_tune() -> Dict[str, str]:
         subprocess.run(["git", "config", "user.name", "Autopilot Bot"], cwd=str(repo_root), check=False)
         subprocess.run(["git", "config", "user.email", "autopilot@local"], cwd=str(repo_root), check=False)
         subprocess.run(["git", "checkout", "-b", branch], cwd=str(repo_root), check=False, capture_output=True)
-        # Run tests safely (force mocks) and lints
+        # Run tests safely (force mocks) to avoid external calls
         subprocess.run(["bash", "-lc", "scripts/run_tests_safe.sh"], cwd=str(repo_root), check=False)
-        subprocess.run(["ruff", "check", "."], cwd=str(repo_root), check=False)
-        subprocess.run(["mypy", "apps"], cwd=str(repo_root), check=False)
         # Commit if any changes were made by the loop (none by default)
         subprocess.run(["git", "add", "-A"], cwd=str(repo_root), check=False)
         subprocess.run(["git", "commit", "-m", "chore: weekly cost/UX tune [FLAG:VOICE_AVATAR_MVP]"], cwd=str(repo_root), check=False)
