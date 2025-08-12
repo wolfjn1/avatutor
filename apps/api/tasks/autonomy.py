@@ -22,7 +22,10 @@ def _get_origin_slug(repo_root: Path) -> Optional[str]:
     m = re.search(r"github.com[:/](?P<slug>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:\.git)?$", out)
     if not m:
         return None
-    return m.group("slug")
+    slug = m.group("slug")
+    if slug.endswith(".git"):
+        slug = slug[:-4]
+    return slug
 
 
 def _get_default_branch(repo_root: Path) -> str:
@@ -49,10 +52,13 @@ def cost_ux_tune() -> Dict[str, str]:
     branch = f"autonomy/proposal-{os.getpid()}"
     pr_url = "pending-local"
     try:
+        # Ensure repo identity for commits
+        subprocess.run(["git", "config", "user.name", "Autopilot Bot"], cwd=str(repo_root), check=False)
+        subprocess.run(["git", "config", "user.email", "autopilot@local"], cwd=str(repo_root), check=False)
         subprocess.run(["git", "checkout", "-b", branch], cwd=str(repo_root), check=False, capture_output=True)
-        # Run formatters/tests as a signal in logs; do not fail the task if they are absent
-        subprocess.run(["pytest", "-q"], cwd=str(repo_root), check=False)
-        subprocess.run(["ruff", "."], cwd=str(repo_root), check=False)
+        # Run tests safely (force mocks) and lints
+        subprocess.run(["bash", "-lc", "scripts/run_tests_safe.sh"], cwd=str(repo_root), check=False)
+        subprocess.run(["ruff", "check", "."], cwd=str(repo_root), check=False)
         subprocess.run(["mypy", "apps"], cwd=str(repo_root), check=False)
         # Commit if any changes were made by the loop (none by default)
         subprocess.run(["git", "add", "-A"], cwd=str(repo_root), check=False)
@@ -60,14 +66,9 @@ def cost_ux_tune() -> Dict[str, str]:
         # Push and attempt to create a PR if possible
         origin_slug = _get_origin_slug(repo_root)
         if gh_token and origin_slug:
-            # Temporarily switch remote to token HTTPS, push, then restore SSH if present
-            ssh_url = f"git@github.com:{origin_slug}.git"
             https_token_url = f"https://x-access-token:{gh_token}@github.com/{origin_slug}.git"
-            try:
-                subprocess.run(["git", "remote", "set-url", "origin", https_token_url], cwd=str(repo_root), check=False)
-                subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
-            finally:
-                subprocess.run(["git", "remote", "set-url", "origin", ssh_url], cwd=str(repo_root), check=False)
+            subprocess.run(["git", "remote", "set-url", "origin", https_token_url], cwd=str(repo_root), check=False)
+            subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
             base = _get_default_branch(repo_root)
             title = "chore: weekly cost/UX tune [FLAG:VOICE_AVATAR_MVP]"
             body = f"Autonomy run; winner: {result.get('winner','')}"

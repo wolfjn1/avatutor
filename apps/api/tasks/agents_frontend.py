@@ -73,7 +73,27 @@ def improve_web_ui() -> Dict[str, str]:
         pass
 
     branch = f"autonomy/web-ui-improve-{os.getpid()}"
+    subprocess.run(["git", "config", "user.name", "Autopilot Bot"], cwd=str(repo_root), check=False)
+    subprocess.run(["git", "config", "user.email", "autopilot@local"], cwd=str(repo_root), check=False)
     _ensure_branch_and_commit(repo_root, branch, "chore(frontend): UI polish and telemetry panel")
+    # Force token-based remote for push if GH_TOKEN provided
+    gh_token = os.getenv("GH_TOKEN")
+    try:
+        if gh_token:
+            out = subprocess.check_output(["git", "config", "--get", "remote.origin.url"], cwd=str(repo_root)).decode().strip()
+            m = None
+            if out.startswith("git@github.com:"):
+                m = out.split(":", 1)[1]
+            elif out.startswith("https://github.com/"):
+                m = out.split("https://github.com/", 1)[1]
+            if m and m.endswith(".git"):
+                m = m[:-4]
+            if m:
+                https_token_url = f"https://x-access-token:{gh_token}@github.com/{m}.git"
+                subprocess.run(["git", "remote", "set-url", "origin", https_token_url], cwd=str(repo_root), check=False)
+                subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
+    except Exception:
+        pass
     pr = _maybe_create_pr(repo_root, branch, "chore(frontend): UI polish", "Automated UI improvement.")
     return {"branch": branch, "pr": pr}
 

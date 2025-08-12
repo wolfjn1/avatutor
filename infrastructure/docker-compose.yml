@@ -29,6 +29,7 @@ services:
     env_file: ../.env
     environment:
       - PYTHONPATH=/app
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new
     command: bash -lc "python scripts/wait_for_it.py api 8000 -- celery -A apps.api.celery_app worker -Q api,frontend,infra,etl -O fair --concurrency ${WORKER_CONCURRENCY:-2}"
     depends_on:
       - api
@@ -37,12 +38,14 @@ services:
     networks: [appnet]
     volumes:
       - ..:/app
+      - ${HOME}/.ssh:/home/appuser/.ssh:ro
 
   beat:
     image: ai-tutor-autopilot:latest
     env_file: ../.env
     environment:
       - PYTHONPATH=/app
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new
     command: bash -lc "python scripts/wait_for_it.py api 8000 -- celery -A apps.api.celery_app beat -l INFO"
     depends_on:
       - api
@@ -51,6 +54,7 @@ services:
     networks: [appnet]
     volumes:
       - ..:/app
+      - ${HOME}/.ssh:/home/appuser/.ssh:ro
 
   redis:
     image: redis:7-alpine
