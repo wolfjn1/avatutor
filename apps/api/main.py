@@ -175,6 +175,35 @@ async def ws_audio(ws: WebSocket, session_id: str = "s-local", user_id: Optional
     await handle_audio_ws(ws, session_id=session_id, user_id=user_id)
 
 
+@app.get("/ops/cos_updates")
+def cos_updates(limit: int = 10) -> Dict[str, Any]:
+    """Return the latest Chief of Staff updates from the event log.
+
+    This endpoint does not require Slack; it reads from the `events` table where name == "cos.update".
+    """
+    with session_scope() as s:
+        rows = (
+            s.query(Event)
+            .filter(Event.name == "cos.update")
+            .order_by(Event.id.desc())
+            .limit(max(1, min(limit, 100)))
+            .all()
+        )
+        out = [
+            {
+                "id": r.id,
+                "ts": r.ts,
+                "items": r.props.get("items"),
+                "summary": r.props.get("summary"),
+                "gaps": r.props.get("gaps"),
+                "app_url": r.props.get("app_url"),
+                "prs": r.props.get("prs"),
+            }
+            for r in rows
+        ]
+    return {"updates": out}
+
+
 @app.get("/experiments/{name}")
 def get_experiment(name: str) -> Dict[str, Any]:
     exp = load_experiment(name)
