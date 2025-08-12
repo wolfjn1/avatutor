@@ -62,21 +62,21 @@ def cost_ux_tune() -> Dict[str, str]:
         subprocess.run(["git", "add", "-A"], cwd=str(repo_root), check=False)
         subprocess.run(["git", "commit", "-m", "chore: weekly cost/UX tune [FLAG:VOICE_AVATAR_MVP]"], cwd=str(repo_root), check=False)
         # Push and attempt to create a PR if possible
+        # Prefer SSH-based push via mounted deploy key
         origin_slug = _get_origin_slug(repo_root)
-        if gh_token and origin_slug:
-            owner = origin_slug.split("/", 1)[0]
-            https_token_url = f"https://{owner}:{gh_token}@github.com/{origin_slug}.git"
-            subprocess.run(["git", "remote", "set-url", "origin", https_token_url], cwd=str(repo_root), check=False)
+        if origin_slug:
+            ssh_url = f"git@github.com:{origin_slug}.git"
+            subprocess.run(["git", "remote", "set-url", "origin", ssh_url], cwd=str(repo_root), check=False)
             subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
             base = _get_default_branch(repo_root)
             title = "chore: weekly cost/UX tune [FLAG:VOICE_AVATAR_MVP]"
             body = f"Autonomy run; winner: {result.get('winner','')}"
             api_url = f"https://api.github.com/repos/{origin_slug}/pulls"
-            headers = {"Authorization": f"Bearer {gh_token}", "Accept": "application/vnd.github+json"}
+            headers = {"Authorization": f"Bearer {gh_token}"} if gh_token else {}
             payload = {"title": title, "head": branch, "base": base, "body": body}
             try:
                 with httpx.Client(timeout=httpx.Timeout(15.0)) as client:
-                    r = client.post(api_url, headers=headers, json=payload)
+                    r = client.post(api_url, headers=headers or None, json=payload)
                     if r.status_code in (200, 201):
                         pr_url = r.json().get("html_url", pr_url)
             except Exception:

@@ -38,7 +38,8 @@ services:
     networks: [appnet]
     volumes:
       - ..:/app
-      - ${HOME}/.ssh:/home/appuser/.ssh:ro
+      - ${SSH_KEY_PATH:-${HOME}/.ssh/avatutor_deploy}:/home/appuser/.ssh/id_ed25519:ro
+      - ${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro
 
   beat:
     image: ai-tutor-autopilot:latest
@@ -54,7 +55,8 @@ services:
     networks: [appnet]
     volumes:
       - ..:/app
-      - ${HOME}/.ssh:/home/appuser/.ssh:ro
+      - ${SSH_KEY_PATH:-${HOME}/.ssh/avatutor_deploy}:/home/appuser/.ssh/id_ed25519:ro
+      - ${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro
 
   redis:
     image: redis:7-alpine
