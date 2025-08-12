@@ -89,7 +89,8 @@ def improve_web_ui() -> Dict[str, str]:
             if m and m.endswith(".git"):
                 m = m[:-4]
             if m:
-                https_token_url = f"https://x-access-token:{gh_token}@github.com/{m}.git"
+                owner = m.split("/", 1)[0]
+                https_token_url = f"https://{owner}:{gh_token}@github.com/{m}.git"
                 subprocess.run(["git", "remote", "set-url", "origin", https_token_url], cwd=str(repo_root), check=False)
                 subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
     except Exception:
