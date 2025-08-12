@@ -100,6 +100,39 @@ def _merge(slug: str, pr_number: int, method: str = "squash") -> bool:
         return False
 
 
+def _update_branch(slug: str, pr_number: int) -> bool:
+    """Ask GitHub to update the PR branch with the base branch.
+
+    Returns True if the request was accepted.
+    """
+    token = os.getenv("GH_TOKEN", "")
+    if not token:
+        return False
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
+            r = client.put(
+                f"https://api.github.com/repos/{slug}/pulls/{pr_number}/update-branch",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+            )
+            return r.status_code in (200, 202)
+    except Exception:
+        return False
+
+
+def _comment(slug: str, pr_number: int, body: str) -> None:
+    token = os.getenv("GH_TOKEN", "")
+    if not token:
+        return
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
+            client.post(
+                f"https://api.github.com/repos/{slug}/issues/{pr_number}/comments",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+                json={"body": body},
+            )
+    except Exception:
+        pass
+
 def _rebase_pr_branch(slug: str, branch: str) -> bool:
     """Rebase PR branch onto origin/main using a temp clone and push via token.
 
@@ -247,7 +280,18 @@ def auto_merge_if_safe(*, slug: str, pr_number: int, branch: str) -> Dict[str, s
             except Exception:
                 pass
             if mergeable_state == "dirty":
-                _rebase_pr_branch(slug, branch)
+                # Try GitHub's update-branch first (respects repo policies)
+                if not _update_branch(slug, pr_number):
+                    # Fallback: attempt a safe rebase in a temp clone
+                    ok = _rebase_pr_branch(slug, branch)
+                    if not ok:
+                        _label(slug, pr_number, ["needs-rebase-conflict"])
+                        _comment(
+                            slug,
+                            pr_number,
+                            "Automated rebase could not resolve conflicts. Please resolve conflicts or push an updated branch."
+                        )
+                        return {"merged": "false", "reason": "conflict"}
             merged = _merge(slug, pr_number)
             if merged:
                 try:
