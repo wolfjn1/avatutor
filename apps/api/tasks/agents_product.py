@@ -70,10 +70,28 @@ def define_next_work() -> Dict[str, str]:
     if proposed not in current:
         plan.write_text(proposed, encoding="utf-8")
 
-    branch = f"autonomy/product-plan-{os.getpid()}"
+    # Concrete next task: add a basic tutoring session layout section if missing
+    index = repo_root / "web" / "index.html"
+    index.parent.mkdir(parents=True, exist_ok=True)
+    html = index.read_text(encoding="utf-8") if index.exists() else "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>AI Tutor</title></head><body></body></html>"
+    if "id=\"session-panel\"" not in html:
+        insert = (
+            "\n<section id=\"session-panel\" style=\"margin-top:16px;padding:12px;border:1px solid #eee;border-radius:8px;\">"
+            "<h3 style=\"margin:0 0 8px 0\">Tutoring Session</h3>"
+            "<div id=\"transcript\" style=\"min-height:80px;font-family:monospace;white-space:pre-wrap;\"></div>"
+            "<div style=\"margin-top:8px\"><button id=\"start\">Start</button> <button id=\"stop\">Stop</button></div>"
+            "</section>\n"
+        )
+        if "</body>" in html:
+            html = html.replace("</body>", insert + "</body>")
+        else:
+            html += insert
+        index.write_text(html, encoding="utf-8")
+
+    branch = f"autonomy/product-next-{os.getpid()}"
     subprocess.run(["git", "checkout", "-b", branch], cwd=str(repo_root), check=False, capture_output=True)
     subprocess.run(["git", "add", "-A"], cwd=str(repo_root), check=False)
-    subprocess.run(["git", "commit", "-m", "docs(product): rolling product plan"], cwd=str(repo_root), check=False)
+    subprocess.run(["git", "commit", "-m", "feat(web): session layout skeleton\ndocs(product): rolling product plan"], cwd=str(repo_root), check=False)
 
     # Try to push with HTTPS+token to avoid SSH
     gh_token = os.getenv("GH_TOKEN")
@@ -90,7 +108,7 @@ def define_next_work() -> Dict[str, str]:
     except Exception:
         pass
 
-    pr = _maybe_create_pr(repo_root, branch, "docs(product): rolling product plan", "Automated product plan to guide next tasks.")
+    pr = _maybe_create_pr(repo_root, branch, "feat(web): session layout skeleton", "Automated product agent creating next task PR.")
     return {"branch": branch, "pr": pr}
 
 
