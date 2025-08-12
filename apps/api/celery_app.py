@@ -33,6 +33,11 @@ celery_app.conf.task_queues = {
     "etl": {},
 }
 
+# Ensure tasks without an explicit route/queue are actually consumed by our worker
+# which listens on "api,frontend,infra,etl". The Celery default queue is "celery",
+# and our worker does not bind to it. Setting this avoids orphaned tasks.
+celery_app.conf.task_default_queue = "api"
+
 celery_app.conf.beat_schedule = {
     "daily-morning-brief": {
         "task": "apps.api.tasks.reports.generate_morning_brief",
