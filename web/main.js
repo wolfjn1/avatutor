@@ -114,3 +114,8 @@ window.updateTelemetry = (p) => {
 
 
 fetch('/achievements.json').then(r=>r.json()).then(d=>{window.achievements=d.badges||[];}).catch(()=>{});
+
+// avatar mouth hook
+window.onTtsChunk=(size)=>{try{const m=document.getElementById('mouth');if(!m)return;m.classList.add('open');clearTimeout(window._mouthTimer);window._mouthTimer=setTimeout(()=>m.classList.remove('open'),80);}catch{}};
+
+(function(){const _wsSend=window.wsSendHook; window.wsSendHook=(msg)=>{ if(_wsSend) _wsSend(msg); }; if(window.onWsMessage){const prev=window.onWsMessage; window.onWsMessage=(m)=>{try{if(m && m.type==='tts_chunk'){window.onTtsChunk(m.size||1)}}catch{}; return prev(m);};}})();
