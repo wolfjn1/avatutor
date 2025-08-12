@@ -21,18 +21,22 @@ services:
       retries: 10
     restart: unless-stopped
     networks: [appnet]
+    volumes:
+      - ..:/app
 
   worker:
     image: ai-tutor-autopilot:latest
     env_file: ../.env
     environment:
       - PYTHONPATH=/app
-    command: bash -lc "python scripts/wait_for_it.py api 8000 -- celery -A apps.api.celery_app worker -Q api,frontend,infra,etl -O fair --concurrency 2"
+    command: bash -lc "python scripts/wait_for_it.py api 8000 -- celery -A apps.api.celery_app worker -Q api,frontend,infra,etl -O fair --concurrency ${WORKER_CONCURRENCY:-2}"
     depends_on:
       - api
       - redis
     restart: unless-stopped
     networks: [appnet]
+    volumes:
+      - ..:/app
 
   beat:
     image: ai-tutor-autopilot:latest
@@ -45,6 +49,8 @@ services:
       - redis
     restart: unless-stopped
     networks: [appnet]
+    volumes:
+      - ..:/app
 
   redis:
     image: redis:7-alpine

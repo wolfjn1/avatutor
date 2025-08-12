@@ -60,7 +60,14 @@ def cost_ux_tune() -> Dict[str, str]:
         # Push and attempt to create a PR if possible
         origin_slug = _get_origin_slug(repo_root)
         if gh_token and origin_slug:
-            subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
+            # Temporarily switch remote to token HTTPS, push, then restore SSH if present
+            ssh_url = f"git@github.com:{origin_slug}.git"
+            https_token_url = f"https://x-access-token:{gh_token}@github.com/{origin_slug}.git"
+            try:
+                subprocess.run(["git", "remote", "set-url", "origin", https_token_url], cwd=str(repo_root), check=False)
+                subprocess.run(["git", "push", "-u", "origin", branch], cwd=str(repo_root), check=False)
+            finally:
+                subprocess.run(["git", "remote", "set-url", "origin", ssh_url], cwd=str(repo_root), check=False)
             base = _get_default_branch(repo_root)
             title = "chore: weekly cost/UX tune [FLAG:VOICE_AVATAR_MVP]"
             body = f"Autonomy run; winner: {result.get('winner','')}"
