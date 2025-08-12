@@ -100,3 +100,17 @@ window.addEventListener('keyup', (e) => {
 fetchFlags();
 
 
+// telemetry wiring
+window.updateTelemetry = (p) => {
+  try {
+    document.getElementById('tokens-in').textContent = p.tokens_in || 0;
+    document.getElementById('tokens-out').textContent = p.tokens_out || 0;
+    const price = p.price_usd || 0;
+    const val = typeof price === 'number' ? price : parseFloat(price);
+    document.getElementById('price-usd').textContent = (isNaN(val) ? 0 : val).toFixed(4);
+  } catch {}
+};
+
+
+
+fetch('/achievements.json').then(r=>r.json()).then(d=>{window.achievements=d.badges||[];}).catch(()=>{});

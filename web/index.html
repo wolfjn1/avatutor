@@ -10,7 +10,7 @@
       #avatar { font-size: 48px; }
       .pill { display: inline-block; padding: 2px 8px; border-radius: 12px; background: #eee; margin-right: 6px; }
     </style>
-  </head>
+  <link rel="stylesheet" href="/tokens.css" /></head>
   <body>
     <h2>Live AI Tutor MVP</h2>
     <div>
@@ -34,6 +34,11 @@
     <audio id="audio" controls></audio>
     <h3>Avatar</h3>
     <div id="avatar">🙂</div>
+
+    <section style="margin-top:16px;padding:8px;border:1px solid #eee;border-radius:8px;">
+      <h3 style="margin-top:0">Telemetry</h3>
+      <div>Tokens in: <span id="tokens-in">0</span> • Tokens out: <span id="tokens-out">0</span> • Price: $<span id="price-usd">0.0000</span></div>
+    </section>
 
     <script type="module" src="/main.js"></script>
   </body>

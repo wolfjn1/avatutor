@@ -1,0 +1,14 @@
+{
+  "badges": [
+    {
+      "id": "first_session",
+      "label": "First Session",
+      "desc": "Completed your first tutoring session"
+    },
+    {
+      "id": "streak_3",
+      "label": "3-Day Streak",
+      "desc": "Showed up 3 days in a row"
+    }
+  ]
+}
