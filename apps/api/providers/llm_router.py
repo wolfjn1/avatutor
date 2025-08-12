@@ -49,7 +49,6 @@ class OpenAIChatLLM(LLMProvider):
 
     async def stream(self, prompt: str) -> AsyncIterator[str]:
         if not self.api_key:
-            # Fallback to echo behavior if not configured
             async for tok in EchoLLM().stream(prompt):
                 yield tok
             return
@@ -66,27 +65,43 @@ class OpenAIChatLLM(LLMProvider):
             "temperature": 0,
         }
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-            async with client.stream("POST", url, headers=headers, json=payload) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    if line.startswith("data: "):
-                        data = line[len("data: ") :].strip()
-                        if data == "[DONE]":
-                            break
-                        try:
-                            obj = json.loads(data)
-                        except Exception:
+        attempt = 0
+        backoff = 0.5
+        while attempt < 3:
+            attempt += 1
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+                    async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                        if resp.status_code == 429 and attempt < 3:
+                            await asyncio.sleep(backoff)
+                            backoff *= 2
                             continue
-                        try:
-                            delta = obj["choices"][0]["delta"]
-                            content = delta.get("content")
-                        except Exception:
-                            content = None
-                        if content:
-                            yield str(content)
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("data: "):
+                                data = line[len("data: ") :].strip()
+                                if data == "[DONE]":
+                                    break
+                                try:
+                                    obj = json.loads(data)
+                                except Exception:
+                                    continue
+                                try:
+                                    delta = obj["choices"][0]["delta"]
+                                    content = delta.get("content")
+                                except Exception:
+                                    content = None
+                                if content:
+                                    yield str(content)
+                break
+            except httpx.HTTPStatusError as e:
+                if e.response is not None and e.response.status_code == 429 and attempt < 3:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                raise
 
     def price_usd_for(self, tokens_in: int, tokens_out: int) -> float:
         return (tokens_in * self.price_in_per_1k + tokens_out * self.price_out_per_1k) / 1000.0
@@ -121,26 +136,41 @@ class AnthropicLLM(LLMProvider):
             "stream": True,
         }
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-            async with client.stream("POST", url, headers=headers, json=payload) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    if line.startswith("data: "):
-                        data = line[len("data: ") :].strip()
-                        if data == "[DONE]":
-                            break
-                        try:
-                            obj = json.loads(data)
-                        except Exception:
+        attempt = 0
+        backoff = 0.5
+        while attempt < 3:
+            attempt += 1
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+                    async with client.stream("POST", url, headers=headers, json=payload) as resp:
+                        if resp.status_code == 429 and attempt < 3:
+                            await asyncio.sleep(backoff)
+                            backoff *= 2
                             continue
-                        # Anthropic streaming emits multiple event types; we want text deltas
-                        if obj.get("type") == "content_block_delta":
-                            delta = obj.get("delta") or {}
-                            text = delta.get("text")
-                            if text:
-                                yield str(text)
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("data: "):
+                                data = line[len("data: ") :].strip()
+                                if data == "[DONE]":
+                                    break
+                                try:
+                                    obj = json.loads(data)
+                                except Exception:
+                                    continue
+                                if obj.get("type") == "content_block_delta":
+                                    delta = obj.get("delta") or {}
+                                    text = delta.get("text")
+                                    if text:
+                                        yield str(text)
+                break
+            except httpx.HTTPStatusError as e:
+                if e.response is not None and e.response.status_code == 429 and attempt < 3:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                raise
 
     def price_usd_for(self, tokens_in: int, tokens_out: int) -> float:
         return (tokens_in * self.price_in_per_1k + tokens_out * self.price_out_per_1k) / 1000.0
