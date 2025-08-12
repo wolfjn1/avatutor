@@ -75,6 +75,24 @@ for br in $branches; do
     pr_url="$(printf "%s" "$resp" | sed -n 's/.*"html_url" *: *"\([^"]*\)".*/\1/p' | head -n1)"
     if [[ -n "$pr_url" ]]; then
       echo "Opened PR: $pr_url"
+      # Optional CTO review labeling and review request
+      cto_user="${CTO_GH_USER:-}"
+      pr_num="$(printf "%s" "$resp" | sed -n 's/.*"number" *: *\([0-9][0-9]*\).*/\1/p' | head -n1)"
+      if [[ -n "$cto_user" && -n "$pr_num" ]]; then
+        curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+          -X POST "https://api.github.com/repos/$slug/issues/$pr_num/labels" \
+          -d '{"labels":["needs-CTO-review"]}' >/dev/null 2>&1 || true
+        curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+          -X POST "https://api.github.com/repos/$slug/pulls/$pr_num/requested_reviewers" \
+          -d "{\"reviewers\":[\"$cto_user\"]}" >/dev/null 2>&1 || true
+      fi
+      # Notify API for event-driven review
+      api_url="${APP_NOTIFY_URL:-http://localhost:8080/ops/notify_pr}"
+      pr_num="$(printf "%s" "$resp" | sed -n 's/.*"number" *: *\([0-9][0-9]*\).*/\1/p' | head -n1)"
+      if [[ -n "$api_url" && -n "$pr_num" ]]; then
+        curl -sS -X POST -H 'Content-Type: application/json' "$api_url" \
+          -d "{\"slug\":\"$slug\",\"branch\":\"$br\",\"pr_number\":$pr_num,\"url\":\"$pr_url\"}" >/dev/null 2>&1 || true
+      fi
     else
       echo "PR creation response (truncated): $(printf "%s" "$resp" | head -c 200)"
     fi

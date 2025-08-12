@@ -14,6 +14,8 @@ from .schemas import FlagCreate, FlagOut, FlagUpdate, TelemetryEventIn, Telemetr
 from .experiments import load_experiment
 from .telemetry import track_event
 from .ws_audio import handle_audio_ws
+from .tasks.cto_review import cto_review
+from .tasks.reviews import head_design, head_product, head_engineering, auto_merge_if_safe
 
 
 logger = structlog.get_logger(__name__)
@@ -187,5 +189,29 @@ def get_experiment(name: str) -> Dict[str, Any]:
         "guardrails": exp.guardrails,
         "SRM_check": exp.SRM_check,
     }
+
+
+@app.post("/ops/notify_pr")
+def notify_pr(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Webhook-style endpoint invoked by the host flusher after opening a PR.
+
+    Expected payload: { slug, pr_number, branch, url }
+    """
+    slug = str(payload.get("slug", ""))
+    branch = str(payload.get("branch", ""))
+    pr_number = int(payload.get("pr_number", 0))
+    url = str(payload.get("url", ""))
+    if not slug or not branch or pr_number <= 0:
+        raise HTTPException(status_code=400, detail="invalid payload")
+    # Fire-and-forget: CTO + heads + auto-merge evaluator
+    try:
+        cto_review.delay(slug=slug, pr_number=pr_number, branch=branch, url=url)
+        head_design.delay(slug=slug, pr_number=pr_number, branch=branch)
+        head_product.delay(slug=slug, pr_number=pr_number, branch=branch)
+        head_engineering.delay(slug=slug, pr_number=pr_number, branch=branch)
+        auto_merge_if_safe.delay(slug=slug, pr_number=pr_number, branch=branch)
+    except Exception:
+        pass
+    return {"ok": True}
 
 
