@@ -17,6 +17,10 @@ celery_app = Celery(
         "apps.api.tasks.autonomy",
         "apps.api.tasks.agents_frontend",
         "apps.api.tasks.agents_backend",
+        "apps.api.tasks.agents_design",
+        "apps.api.tasks.agents_engagement",
+        "apps.api.tasks.agents_tutor",
+        "apps.api.tasks.chief_of_staff",
     ],
 )
 
@@ -38,19 +42,39 @@ celery_app.conf.beat_schedule = {
         "schedule": 60.0 * 120.0,  # every 120 minutes
         "options": {"queue": "infra"},
     },
-    "frontend-polish-120m": {
+    "frontend-polish-30m": {
         "task": "apps.api.tasks.agents_frontend.improve_web_ui",
-        "schedule": 60.0 * 120.0,  # every 120 minutes
+        "schedule": 60.0 * 30.0,  # every 30 minutes
         "options": {"queue": "frontend"},
     },
-    "backend-prompt-120m": {
+    "backend-prompt-30m": {
         "task": "apps.api.tasks.agents_backend.improve_prompt_quality",
-        "schedule": 60.0 * 120.0,
+        "schedule": 60.0 * 30.0,
         "options": {"queue": "api"},
     },
-    "backend-latency-120m": {
+    "backend-latency-30m": {
         "task": "apps.api.tasks.agents_backend.tune_latency_budgets",
-        "schedule": 60.0 * 120.0,
+        "schedule": 60.0 * 30.0,
+        "options": {"queue": "infra"},
+    },
+    "design-30m": {
+        "task": "apps.api.tasks.agents_design.improve_design_system",
+        "schedule": 60.0 * 30.0,
+        "options": {"queue": "frontend"},
+    },
+    "engagement-30m": {
+        "task": "apps.api.tasks.agents_engagement.improve_engagement",
+        "schedule": 60.0 * 30.0,
+        "options": {"queue": "frontend"},
+    },
+    "tutor-avatar-30m": {
+        "task": "apps.api.tasks.agents_tutor.improve_tutor_avatar",
+        "schedule": 60.0 * 30.0,
+        "options": {"queue": "api"},
+    },
+    "cos-progress-30m": {
+        "task": "apps.api.tasks.chief_of_staff.progress_update",
+        "schedule": 60.0 * 30.0,
         "options": {"queue": "infra"},
     },
 }
