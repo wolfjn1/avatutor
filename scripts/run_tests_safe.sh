@@ -6,3 +6,4 @@ export STT_PROVIDER=mock
 export TTS_PROVIDER=mock
 pytest -q
 
+

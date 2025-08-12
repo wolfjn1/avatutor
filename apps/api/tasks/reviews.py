@@ -160,3 +160,4 @@ def auto_merge_if_safe(*, slug: str, pr_number: int, branch: str) -> Dict[str, s
     return {"merged": "false", "reason": "labels_incomplete"}
 
 
+
