@@ -35,7 +35,7 @@ fi
 # Choose remote URL strategy: prefer HTTPS token only if token validates, else SSH
 use_https_token=false
 if [[ -n "${GH_TOKEN:-}" ]]; then
-  if curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" https://api.github.com/user >/dev/null 2>&1; then
+  if curl -fsS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" https://api.github.com/user >/dev/null 2>&1; then
     use_https_token=true
   fi
 fi
@@ -70,16 +70,30 @@ for br in $branches; do
 
   echo "Pushing $br ..."
   if ! git push -u origin "$br"; then
-    echo "Push failed for $br. Skipping PR creation."
-    continue
+    echo "Push via $(git config --get remote.origin.url) failed for $br."
+    if [[ "$use_https_token" == true ]]; then
+      echo "Retrying over SSH..."
+      git remote set-url origin "git@github.com:${slug}.git" || true
+      if ! git push -u origin "$br"; then
+        echo "Push failed for $br over HTTPS and SSH. Skipping PR creation."
+        # Restore remote based on token validity for subsequent branches
+        if [[ "$use_https_token" == true ]]; then
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${slug}.git" || true
+        fi
+        continue
+      fi
+    else
+      echo "Push failed for $br. Skipping PR creation."
+      continue
+    fi
   fi
 
-  if [[ -n "${GH_TOKEN:-}" ]]; then
+  if [[ "$use_https_token" == true ]]; then
     title="$(git log -1 --pretty=%s "$br" | sed 's/"/\\"/g')"
     body_raw="$(git log -1 --pretty=%b "$br")"
     body="$(printf "%s" "$body_raw" | sed 's/"/\\"/g')"
     json_payload="$(printf '{"title":"%s","head":"%s","base":"%s","body":"%s"}' "$title" "$br" "$base" "$body")"
-    resp="$(curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/$slug/pulls" -d "$json_payload" || true)"
+    resp="$(curl -sS -f -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -X POST "https://api.github.com/repos/$slug/pulls" -d "$json_payload" || true)"
     pr_url="$(printf "%s" "$resp" | sed -n 's/.*"html_url" *: *"\([^"]*\)".*/\1/p' | head -n1)"
     if [[ -n "$pr_url" ]]; then
       echo "Opened PR: $pr_url"
@@ -99,10 +113,10 @@ for br in $branches; do
           -d "{\"slug\":\"$slug\",\"branch\":\"$br\",\"pr_number\":$pr_num,\"url\":\"$pr_url\"}" >/dev/null 2>&1 || true
       fi
     else
-      echo "PR creation response (truncated): $(printf "%s" "$resp" | head -c 200)"
+      echo "PR creation skipped or failed (no valid token)."
     fi
   else
-    echo "GH_TOKEN not set. Skipped PR creation for $br."
+    echo "GH_TOKEN not set or invalid. Skipped PR creation for $br."
   fi
 
   echo "$br" >> "$STATE_FILE"
