@@ -100,3 +100,22 @@ window.addEventListener('keyup', (e) => {
 fetchFlags();
 
 
+// telemetry wiring
+window.updateTelemetry = (p) => {
+  try {
+    document.getElementById('tokens-in').textContent = p.tokens_in || 0;
+    document.getElementById('tokens-out').textContent = p.tokens_out || 0;
+    const price = p.price_usd || 0;
+    const val = typeof price === 'number' ? price : parseFloat(price);
+    document.getElementById('price-usd').textContent = (isNaN(val) ? 0 : val).toFixed(4);
+  } catch {}
+};
+
+
+
+fetch('/achievements.json').then(r=>r.json()).then(d=>{window.achievements=d.badges||[];}).catch(()=>{});
+
+// avatar mouth hook
+window.onTtsChunk=(size)=>{try{const m=document.getElementById('mouth');if(!m)return;m.classList.add('open');clearTimeout(window._mouthTimer);window._mouthTimer=setTimeout(()=>m.classList.remove('open'),80);}catch{}};
+
+(function(){const _wsSend=window.wsSendHook; window.wsSendHook=(msg)=>{ if(_wsSend) _wsSend(msg); }; if(window.onWsMessage){const prev=window.onWsMessage; window.onWsMessage=(m)=>{try{if(m && m.type==='tts_chunk'){window.onTtsChunk(m.size||1)}}catch{}; return prev(m);};}})();

@@ -15,3 +15,5 @@ flags:
   - VAD_BARGE_IN
 
 
+
+# tuned: budgets reviewed at runtime by autonomy

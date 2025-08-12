@@ -8,6 +8,13 @@
 ## GH_TOKEN usage
 
 - Export `GH_TOKEN` in the API/worker environment to enable PR creation/push.
+- Host PR flusher will also read `~/.config/avatutor/gh_token`.
+- Optional: set `CTO_GH_USER` in your shell so PRs auto-label `needs-CTO-review` and request a review from CTO.
+
+## Chief of Staff cadence
+
+- A 30-min progress report task summarizes autonomy commits in the last half hour and posts to Slack if `OPS_SLACK_WEBHOOK` set.
+- Each report should include links to the latest app (`http://localhost:8080`) and any fresh PRs.
 - Secrets are only read from environment variables; never commit credentials.
 
 ## Rollback
