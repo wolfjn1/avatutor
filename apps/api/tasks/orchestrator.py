@@ -15,6 +15,7 @@ def _dispatch_work_batch() -> Dict[str, str]:
     send("apps.api.tasks.agents_design.improve_design_system", queue="frontend")
     send("apps.api.tasks.agents_engagement.improve_engagement", queue="frontend")
     send("apps.api.tasks.agents_tutor.improve_tutor_avatar", queue="api")
+    send("apps.api.tasks.agents_product.define_next_work", queue="infra")
     send("apps.api.tasks.autonomy.cost_ux_tune", queue="infra")
     return {"queued": "true"}
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Flush local autonomy/* branches: push via SSH and open PRs (if GH_TOKEN is available)
+# Flush local autonomy/* branches: prefer HTTPS with GH_TOKEN (non-interactive)
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
@@ -24,6 +24,7 @@ slug=""
 case "$origin_url" in
   git@github.com:*) slug="${origin_url#git@github.com:}"; slug="${slug%.git}" ;;
   https://github.com/*) slug="${origin_url#https://github.com/}"; slug="${slug%.git}" ;;
+  https://x-access-token:*) slug="${origin_url#https://x-access-token:*@github.com/}"; slug="${slug%.git}" ;;
 esac
 
 if [[ -z "$slug" ]]; then
@@ -31,10 +32,17 @@ if [[ -z "$slug" ]]; then
   exit 0
 fi
 
-ssh_url="git@github.com:$slug.git"
-if [[ "$origin_url" != "$ssh_url" ]]; then
-  echo "Setting origin to SSH: $ssh_url"
-  git remote set-url origin "$ssh_url" || true
+# Choose remote URL strategy: prefer HTTPS token only if token validates, else SSH
+use_https_token=false
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  if curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" https://api.github.com/user >/dev/null 2>&1; then
+    use_https_token=true
+  fi
+fi
+if [[ "$use_https_token" == true ]]; then
+  git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${slug}.git" || true
+else
+  git remote set-url origin "git@github.com:${slug}.git" || true
 fi
 
 # Determine default base branch
@@ -75,7 +83,6 @@ for br in $branches; do
     pr_url="$(printf "%s" "$resp" | sed -n 's/.*"html_url" *: *"\([^"]*\)".*/\1/p' | head -n1)"
     if [[ -n "$pr_url" ]]; then
       echo "Opened PR: $pr_url"
-      # Optional CTO review labeling and review request
       cto_user="${CTO_GH_USER:-}"
       pr_num="$(printf "%s" "$resp" | sed -n 's/.*"number" *: *\([0-9][0-9]*\).*/\1/p' | head -n1)"
       if [[ -n "$cto_user" && -n "$pr_num" ]]; then
@@ -86,9 +93,7 @@ for br in $branches; do
           -X POST "https://api.github.com/repos/$slug/pulls/$pr_num/requested_reviewers" \
           -d "{\"reviewers\":[\"$cto_user\"]}" >/dev/null 2>&1 || true
       fi
-      # Notify API for event-driven review
       api_url="${APP_NOTIFY_URL:-http://localhost:8080/ops/notify_pr}"
-      pr_num="$(printf "%s" "$resp" | sed -n 's/.*"number" *: *\([0-9][0-9]*\).*/\1/p' | head -n1)"
       if [[ -n "$api_url" && -n "$pr_num" ]]; then
         curl -sS -X POST -H 'Content-Type: application/json' "$api_url" \
           -d "{\"slug\":\"$slug\",\"branch\":\"$br\",\"pr_number\":$pr_num,\"url\":\"$pr_url\"}" >/dev/null 2>&1 || true

@@ -20,6 +20,7 @@ celery_app = Celery(
         "apps.api.tasks.agents_design",
         "apps.api.tasks.agents_engagement",
         "apps.api.tasks.agents_tutor",
+        "apps.api.tasks.agents_product",
         "apps.api.tasks.chief_of_staff",
         "apps.api.tasks.cto_review",
         "apps.api.tasks.reviews",
