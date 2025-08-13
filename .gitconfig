@@ -1,0 +1,6 @@
+[merge]
+    keepBackup = false
+
+[merge "ours"]
+    driver = true
+

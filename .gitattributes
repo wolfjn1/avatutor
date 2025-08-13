@@ -1,0 +1,3 @@
+app.db merge=ours -diff
+celerybeat-schedule merge=ours -diff
+
